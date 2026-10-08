@@ -49,11 +49,6 @@
     "release": "snowdev release",
     "test": "node --test"
   },
-  "packageManager": "npm@11.3.0",
-  "engines": {
-    "node": ">=24.0.0",
-    "snowdev": ">=3.0.0-alpha.3"
-  },
   "dependencies": {
     "earcut": "^3.2.4",
     "pex-math": "^4.4.0",
@@ -65,5 +60,10 @@
     "pex-cam": "^3.0.1",
     "pex-gpu": "^0.0.4",
     "tweakpane": "^4.0.5"
+  },
+  "packageManager": "npm@11.3.0",
+  "engines": {
+    "node": ">=24.0.0",
+    "snowdev": ">=3.0.0-alpha.3"
   }
 }
