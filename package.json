@@ -1,0 +1,69 @@
+{
+  "name": "geom-extrude",
+  "version": "1.0.0",
+  "description": "Extrude a planar simplicial complex or closed polylines into a solid with caps, walls, normals and uvs.",
+  "keywords": [
+    "geom",
+    "geometry",
+    "extrude",
+    "extrusion",
+    "simplicial-complex",
+    "polyline",
+    "mesh",
+    "3d",
+    "typed-array"
+  ],
+  "homepage": "https://github.com/dmnsgn/geom-extrude",
+  "bugs": "https://github.com/dmnsgn/geom-extrude/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dmnsgn/geom-extrude.git"
+  },
+  "funding": [
+    {
+      "type": "individual",
+      "url": "https://paypal.me/dmnsgn"
+    },
+    {
+      "type": "individual",
+      "url": "https://commerce.coinbase.com/checkout/56cbdf28-e323-48d8-9c98-7019e72c97f3"
+    }
+  ],
+  "license": "MIT",
+  "author": "Damien Seguin (https://github.com/dmnsgn)",
+  "contributors": [
+    "Marcin Ignac <marcin.ignac@gmail.com> (http://marcinignac.com)"
+  ],
+  "sideEffects": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "main": "./index.js",
+  "types": "./types/index.d.ts",
+  "scripts": {
+    "dev": "snowdev dev",
+    "release": "snowdev release",
+    "test": "node --test"
+  },
+  "packageManager": "npm@11.3.0",
+  "engines": {
+    "node": ">=24.0.0",
+    "snowdev": ">=3.0.0-alpha.3"
+  },
+  "dependencies": {
+    "earcut": "^3.2.4",
+    "pex-math": "^4.4.0",
+    "primitive-geometry": "^3.2.1"
+  },
+  "devDependencies": {
+    "es-module-shims": "^2.8.4",
+    "geom-merge": "^3.0.0",
+    "pex-cam": "^3.0.1",
+    "pex-gpu": "^0.0.4",
+    "tweakpane": "^4.0.5"
+  }
+}
