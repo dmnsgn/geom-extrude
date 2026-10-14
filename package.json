@@ -56,6 +56,7 @@
   },
   "devDependencies": {
     "es-module-shims": "^2.8.4",
+    "geom-edges": "^2.0.0",
     "geom-merge": "^3.0.0",
     "pex-cam": "^3.0.1",
     "pex-gpu": "^0.0.4",

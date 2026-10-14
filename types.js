@@ -76,6 +76,8 @@
  * @property {boolean | "auto"} [closed="auto"] Close PolylineComplex cells
  *   into capped loops. `"auto"` only closes the ones ending on their first
  *   index or position.
+ * @property {number} [wallSegments=1] Subdivisions of the walls from the start
+ *   cap to the end cap.
  */
 
 export {};

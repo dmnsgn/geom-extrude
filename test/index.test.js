@@ -20,6 +20,7 @@ import geomExtrude, {
   computeBoundary,
   computeColumns,
   computeProfile,
+  stitchRings,
 } from "../index.js";
 import { GLYPHS, glyph } from "../examples/glyph.js";
 import { analyze, area, assertArrayClose, bounds, close } from "./helpers.js";
@@ -171,6 +172,38 @@ describe("computeColumns", () => {
     );
     assert.equal(shapeIndices.length, 8);
     assert.equal(cells.length, 7 * 2);
+  });
+});
+
+describe("stitchRings", () => {
+  const shape = squarePath({ closed: true });
+  const { normal, loops } = computeProfile(shape);
+  const columns = computeColumns(shape.positions, loops, normal);
+  const edgeCount = columns.cells.length / 2;
+  const count = columns.shapeIndices.length;
+
+  it("stitches consecutive rings, wrapping when closed", () => {
+    for (const [closed, stitchCount] of [
+      [false, 2],
+      [true, 3],
+    ]) {
+      const out = new Uint32Array(edgeCount * stitchCount * 6);
+      const end = stitchRings(out, columns, { ringCount: 3, closed });
+      assert.equal(end, out.length);
+      assert.ok(Math.max(...out) < count * 3);
+    }
+  });
+
+  it("offsets vertices and cells", () => {
+    const out = new Uint32Array(10 + edgeCount * 6);
+    const end = stitchRings(out, columns, {
+      ringCount: 2,
+      vertexOffset: 100,
+      cellOffset: 10,
+    });
+    assert.equal(end, out.length);
+    assert.deepEqual(Array.from(out.subarray(0, 10)), Array(10).fill(0));
+    assert.ok(Math.min(...out.subarray(10)) >= 100);
   });
 });
 
@@ -341,6 +374,31 @@ describe("geomExtrude", () => {
     assert.equal(Math.min(...u), 0);
     assert.ok(close(Math.max(...u), 1));
     assert.deepEqual([Math.min(...v), Math.max(...v)], [0, 1]);
+  });
+
+  it("subdivides walls", () => {
+    const shape = star();
+    const thickness = 0.5;
+    const single = geomExtrude(shape, { thickness });
+    const geometry = geomExtrude(shape, { thickness, wallSegments: 4 });
+
+    const { volume, openEdges, flippedNormals } = analyze(geometry);
+    assert.equal(openEdges, 0);
+    assert.equal(flippedNormals, 0);
+    assert.ok(close(volume, analyze(single).volume));
+
+    const capVertexCount = (shape.positions.length / 3) * 2;
+    const wallVertexCount = (single.positions.length / 3 - capVertexCount) / 2;
+    assert.equal(
+      geometry.positions.length / 3,
+      capVertexCount + wallVertexCount * 5,
+    );
+
+    const vs = new Set();
+    for (let i = capVertexCount; i < geometry.uvs.length / 2; i++) {
+      vs.add(geometry.uvs[i * 2 + 1]);
+    }
+    assert.deepEqual([...vs].sort(), [0, 0.25, 0.5, 0.75, 1]);
   });
 
   it("splits wall normals at creases", () => {

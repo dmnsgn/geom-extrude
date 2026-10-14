@@ -231,7 +231,7 @@ const fromPolylines = (positions, polylines, direction, closed) => {
       const loop = Array.from(polyline);
       if (closed === false) return { loop, isClosed: false };
 
-      // Repeated first index or position: SVG-like paths duplicate the vertex
+      // Compare positions: SVG-like paths repeat the first point on a new vertex
       const isClosing =
         loop.length > 1 &&
         avec3.equals(positions, loop[0], positions, loop.at(-1));
@@ -250,7 +250,6 @@ const fromPolylines = (positions, polylines, direction, closed) => {
         )
       : DIRECTIONS[direction];
 
-  // Only closed loops get capped
   const closedLoops = polylineLoops
     .filter(({ isClosed }) => isClosed)
     .map(({ loop }) => loop);
@@ -469,38 +468,73 @@ const computeColumns = (
   };
 };
 
-const computeWalls = (geometry, positions, columns, wall, indices) => {
-  const { normal, start, end, flip } = wall;
-  const count = columns.shapeIndices.length;
-  const offset = indices.vertex;
+/**
+ * Write the wall triangles between consecutive rings of columns. Ring vertices
+ * are laid out ring after ring, column after column.
+ *
+ * @param {import("./types.js").TypedArrayLike} out Cells to write into.
+ * @param {import("./types.js").Columns} columns
+ * @param {object} options
+ * @param {number} options.ringCount
+ * @param {boolean} [options.closed=false] Also stitch the last ring to the
+ *   first one.
+ * @param {number} [options.vertexOffset=0] Index of the first ring vertex.
+ * @param {number} [options.cellOffset=0] Index in `out` of the first triangle
+ *   index.
+ * @param {boolean} [options.flip=false] Reverse the triangles winding.
+ * @returns {number} Index in `out` after the last written triangle index.
+ */
+const stitchRings = (
+  out,
+  { shapeIndices, cells },
+  { ringCount, closed = false, vertexOffset = 0, cellOffset = 0, flip = false },
+) => {
+  const count = shapeIndices.length;
+  const stitchCount = closed ? ringCount : ringCount - 1;
+  let index = cellOffset;
 
-  for (const [ring, displacement] of [start, end].entries()) {
-    for (let i = 0; i < count; i++) {
-      const vertex = offset + ring * count + i;
-      avec3.set(geometry.positions, vertex, positions, columns.shapeIndices[i]);
-      avec3.addScaled(geometry.positions, vertex, normal, 0, displacement);
-      avec3.set(geometry.normals, vertex, columns.normals, i);
-      avec2.set2(geometry.uvs, vertex, columns.u[i], ring);
+  for (let ring = 0; ring < stitchCount; ring++) {
+    const current = vertexOffset + ring * count;
+    const next = vertexOffset + ((ring + 1) % ringCount) * count;
+
+    // [a, a', b] faces outward when rings follow the start cap winding
+    for (let i = 0; i < cells.length; i += 2) {
+      const a = cells[i];
+      const b = cells[i + 1];
+      setTriangle(out, index, current + a, next + a, current + b, flip);
+      setTriangle(out, index + 3, next + a, next + b, current + b, flip);
+      index += 6;
     }
   }
 
-  // Loops follow the start cap winding: [a, a', b] faces outward
-  for (let i = 0; i < columns.cells.length; i += 2) {
-    const a = offset + columns.cells[i];
-    const b = offset + columns.cells[i + 1];
-    setTriangle(geometry.cells, indices.cell, a, a + count, b, flip);
-    setTriangle(
-      geometry.cells,
-      indices.cell + 3,
-      a + count,
-      b + count,
-      b,
-      flip,
-    );
-    indices.cell += 6;
+  return index;
+};
+
+const computeWalls = (geometry, positions, columns, wall, indices) => {
+  const { normal, start, end, ringCount, flip } = wall;
+  const count = columns.shapeIndices.length;
+  const vertexOffset = indices.vertex;
+
+  for (let ring = 0; ring < ringCount; ring++) {
+    const v = ring / (ringCount - 1);
+    const displacement = start + (end - start) * v;
+
+    for (let i = 0; i < count; i++) {
+      const vertex = vertexOffset + ring * count + i;
+      avec3.set(geometry.positions, vertex, positions, columns.shapeIndices[i]);
+      avec3.addScaled(geometry.positions, vertex, normal, 0, displacement);
+      avec3.set(geometry.normals, vertex, columns.normals, i);
+      avec2.set2(geometry.uvs, vertex, columns.u[i], v);
+    }
   }
 
-  indices.vertex += count * 2;
+  indices.cell = stitchRings(geometry.cells, columns, {
+    ringCount,
+    vertexOffset,
+    cellOffset: indices.cell,
+    flip,
+  });
+  indices.vertex += count * ringCount;
 };
 
 /**
@@ -531,6 +565,7 @@ const geomExtrude = (
     creaseAngle = Math.PI / 6,
     ignoreSeams = true,
     closed = "auto",
+    wallSegments = 1,
   } = {},
 ) => {
   const { positions } = shape;
@@ -543,19 +578,21 @@ const geomExtrude = (
 
   const columns = computeColumns(positions, loops, normal, creaseAngle);
   const wallEdgeCount = columns.cells.length / 2;
+  const ringCount = wallSegments + 1;
   // Open polylines only: no cap triangles to place
   const capCount = cells.length ? Number(capStart) + Number(capEnd) : 0;
 
   // Walls don't share vertices with the caps: they need their own normals and
   // uvs
-  const vertexCount = count * capCount + columns.shapeIndices.length * 2;
+  const vertexCount =
+    count * capCount + columns.shapeIndices.length * ringCount;
 
   const geometry = {
     positions: new Float32Array(vertexCount * 3),
     normals: new Float32Array(vertexCount * 3),
     uvs: new Float32Array(vertexCount * 2),
     cells: new (getCellsTypedArray(vertexCount))(
-      cells.length * capCount + wallEdgeCount * 6,
+      cells.length * capCount + wallEdgeCount * wallSegments * 6,
     ),
   };
   const indices = { vertex: 0, cell: 0 };
@@ -589,14 +626,14 @@ const geomExtrude = (
     geometry,
     positions,
     columns,
-    { normal, start, end, flip },
+    { normal, start, end, ringCount, flip },
     indices,
   );
 
   return geometry;
 };
 
-export { computeBoundary, computeColumns, computeProfile };
+export { computeBoundary, computeColumns, computeProfile, stitchRings };
 
 export default geomExtrude;
 

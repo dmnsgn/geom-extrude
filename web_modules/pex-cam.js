@@ -1,5 +1,5 @@
 import { r as __toESM, t as __commonJSMin } from "./_chunks/rolldown-runtime-og5q1MHW.js";
-import { A as clamp, C as frustum, D as ortho, M as toDegrees, N as toRadians, O as perspective$1, S as create, T as lookAt, _ as set$1, b as distance$1, c as add, d as distance, f as dot, g as scale, h as normalize, j as lerp, k as set, l as copy, m as multMat4, p as length, u as create$1, v as sub, w as invert } from "./_chunks/pex-math-CpLacBFm.js";
+import { A as set, C as create, E as lookAt, M as lerp, N as toDegrees, O as ortho, P as toRadians, T as invert, _ as scale, d as create$1, f as distance, g as normalize, h as multMat4, j as clamp, k as perspective$1, l as add, m as length, p as dot, u as copy, v as set$1, w as frustum, x as distance$1, y as sub } from "./_chunks/pex-math-B049N5B_.js";
 
 /**
 * An interface for cameras to extend

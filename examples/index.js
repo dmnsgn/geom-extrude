@@ -14,6 +14,7 @@ import {
   star,
   starPath,
 } from "primitive-geometry";
+import edges from "geom-edges";
 import merge from "geom-merge";
 import { Pane } from "tweakpane";
 
@@ -100,6 +101,7 @@ const toListOptions = (keys) =>
 
 const settings = {
   shape: "star (hole)",
+  wireframe: false,
   shapeUvs: true,
   capMapping: "shape",
   orientation: "z",
@@ -115,6 +117,7 @@ const options = {
   creaseAngle: Math.PI / 6,
   ignoreSeams: true,
   closed: "auto",
+  wallSegments: 1,
 };
 
 const createShape = () => {
@@ -186,6 +189,24 @@ fn fragmentMain(input: VertexOut, @builtin(front_facing) frontFacing: bool) -> @
 }
 `;
 
+const wireframeShader = /* wgsl */ `
+struct Uniforms {
+  projection: mat4x4f,
+  view: mat4x4f,
+}
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+@vertex
+fn vertexMain(@location(0) position: vec3f) -> @builtin(position) vec4f {
+  return uniforms.projection * uniforms.view * vec4f(position, 1.0);
+}
+
+@fragment
+fn fragmentMain() -> @location(0) vec4f {
+  return vec4f(1.0);
+}
+`;
+
 const camera = createCamera({
   position: [1, 0.5, 1.5],
   fov: Math.PI / 4,
@@ -197,10 +218,19 @@ createOrbiter({ camera, element: ctx.canvas });
 
 const projection = mat4.create();
 
+const pass = { clearValue: [0.13, 0.13, 0.13, 1], depthClearValue: 1 };
+
 const drawCmd = gpu.defineCommand({
   label: "drawExtrusion",
-  pass: { clearValue: [0.13, 0.13, 0.13, 1], depthClearValue: 1 },
-  pipeline: { shader, depthWriteEnabled: true, cullMode: "none" },
+  pipeline: {
+    shader,
+    depthWriteEnabled: true,
+    cullMode: "none",
+    // Pushed back so the wireframe lines win the depth test: WebGPU only
+    // biases triangles
+    depthBias: 1,
+    depthBiasSlopeScale: 1,
+  },
   uniforms: {
     projection,
     view: camera.viewMatrix,
@@ -208,6 +238,16 @@ const drawCmd = gpu.defineCommand({
     colorSampler: sampler,
     colorTexture: texture,
   },
+});
+
+const wireframeCmd = gpu.defineCommand({
+  label: "drawWireframe",
+  pipeline: {
+    shader: wireframeShader,
+    topology: "line-list",
+    depthWriteEnabled: true,
+  },
+  uniforms: { projection, view: camera.viewMatrix },
 });
 
 const update = () => {
@@ -219,6 +259,7 @@ const update = () => {
   for (const buffer of [
     ...Object.values(drawCmd.attributes ?? {}),
     drawCmd.indices,
+    wireframeCmd.indices,
   ]) {
     buffer?.[Symbol.dispose]();
   }
@@ -236,6 +277,12 @@ const update = () => {
     data: geometry.cells,
   });
   drawCmd.uniforms.mode = settings.view;
+
+  wireframeCmd.attributes = { position: drawCmd.attributes.position };
+  wireframeCmd.indices = gpu.createBuffer(ctx, {
+    usage: "index",
+    data: Uint32Array.from(edges(geometry.cells).flat()),
+  });
 };
 update();
 
@@ -264,8 +311,10 @@ extrudeFolder.addBinding(settings, "capMapping", {
 extrudeFolder.addBinding(options, "creaseAngle", { min: 0, max: Math.PI });
 extrudeFolder.addBinding(options, "ignoreSeams");
 extrudeFolder.addBinding(options, "closed", { options: CLOSED });
+extrudeFolder.addBinding(options, "wallSegments", { min: 1, max: 32, step: 1 });
 
 pane.addBinding(settings, "view", { options: VIEWS });
+pane.addBinding(settings, "wireframe");
 
 pane.on("change", update);
 
@@ -281,5 +330,8 @@ gpu.frame(ctx, () => {
     camera.near,
     camera.far,
   );
-  gpu.submit(ctx, drawCmd);
+  gpu.submit(ctx, { pass }, () => {
+    gpu.submit(ctx, drawCmd);
+    if (settings.wireframe) gpu.submit(ctx, wireframeCmd);
+  });
 });

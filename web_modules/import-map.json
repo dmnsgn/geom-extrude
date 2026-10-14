@@ -5,6 +5,7 @@
     "es-module-shims/debug": "./es-module-shims/debug.js",
     "es-module-shims/wasm": "./es-module-shims/wasm.js",
     "es-module-shims/typescript-transform": "./es-module-shims/typescript-transform.js",
+    "geom-edges": "./geom-edges.js",
     "geom-merge": "./geom-merge.js",
     "pex-cam": "./pex-cam.js",
     "pex-gpu": "./pex-gpu.js",
