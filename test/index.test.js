@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   annulus,
   annulusPath,
+  circlePath,
   cross,
   crossPath,
   disc,
@@ -15,7 +16,11 @@ import {
   starPath,
 } from "primitive-geometry";
 
-import geomExtrude, { computeBoundary, computeProfile } from "../index.js";
+import geomExtrude, {
+  computeBoundary,
+  computeColumns,
+  computeProfile,
+} from "../index.js";
 import { GLYPHS, glyph } from "../examples/glyph.js";
 import { analyze, area, assertArrayClose, bounds, close } from "./helpers.js";
 
@@ -133,6 +138,39 @@ describe("computeProfile", () => {
     const closed = computeProfile(squarePath(), { closed: true });
     assert.deepEqual(closed.loops, [[0, 1, 2, 3, 0]]);
     assert.equal(closed.cells.length, 6);
+  });
+});
+
+describe("computeColumns", () => {
+  const columnsOf = (shape, creaseAngle) => {
+    const { normal, loops } = computeProfile(shape);
+    return computeColumns(shape.positions, loops, normal, creaseAngle);
+  };
+
+  it("shares smooth columns and splits the u seam", () => {
+    const segments = 32;
+    const { shapeIndices, u, cells } = columnsOf(
+      circlePath({ segments, closed: true }),
+    );
+    assert.equal(shapeIndices.length, segments + 1);
+    assert.equal(cells.length, segments * 2);
+    assert.equal(shapeIndices[0], shapeIndices.at(-1));
+    assert.deepEqual([u[0], u.at(-1)], [0, 1]);
+  });
+
+  it("splits columns at creases", () => {
+    const shape = squarePath({ closed: true });
+    assert.equal(columnsOf(shape).shapeIndices.length, 8);
+    assert.equal(columnsOf(shape, Math.PI).shapeIndices.length, 5);
+  });
+
+  it("ends open polylines on their last point", () => {
+    const { shapeIndices, cells } = columnsOf(
+      circlePath({ segments: 8 }),
+      Math.PI,
+    );
+    assert.equal(shapeIndices.length, 8);
+    assert.equal(cells.length, 7 * 2);
   });
 });
 

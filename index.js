@@ -376,53 +376,131 @@ const computeLoopEdges = (positions, loop, normal) => {
   return { edgeNormals, distances };
 };
 
-const computeWallNormal = (out, edgeNormals, i, neighbour, cosCreaseAngle) => {
-  avec3.set(out, 0, edgeNormals, i);
-  if (
-    neighbour === -1 ||
-    avec3.dot(edgeNormals, i, edgeNormals, neighbour) <= cosCreaseAngle
-  ) {
-    return;
-  }
-  avec3.add(out, 0, edgeNormals, neighbour);
-  avec3.normalize(out, 0);
+const isSmooth = (edgeNormals, i, neighbour, cosCreaseAngle) =>
+  neighbour !== -1 &&
+  avec3.dot(edgeNormals, i, edgeNormals, neighbour) > cosCreaseAngle;
+
+const computeWallNormal = (
+  out,
+  j,
+  edgeNormals,
+  i,
+  neighbour,
+  cosCreaseAngle,
+) => {
+  avec3.set(out, j, edgeNormals, i);
+  if (!isSmooth(edgeNormals, i, neighbour, cosCreaseAngle)) return;
+  avec3.add(out, j, edgeNormals, neighbour);
+  avec3.normalize(out, j);
 };
 
-const computeWall = (geometry, positions, loop, wall, indices) => {
-  const { normal, start, end, flip, cosCreaseAngle } = wall;
-  const edgeCount = loop.length - 1;
-  const closed = loop[0] === loop[edgeCount];
-  const { edgeNormals, distances } = computeLoopEdges(positions, loop, normal);
-  const perimeter = distances[edgeCount];
+/**
+ * Compute the wall cross-section of profile loops: columns shared by adjacent
+ * edges, split at creases and at the u seam of closed loops.
+ *
+ * @param {Float32Array} positions
+ * @param {number[][]} loops Profile loops.
+ * @param {number[]} normal Profile facing normal.
+ * @param {number} [creaseAngle=Math.PI / 6] Turns sharper than this angle (in
+ *   radians) split columns.
+ * @returns {import("./types.js").Columns}
+ */
+const computeColumns = (
+  positions,
+  loops,
+  normal,
+  creaseAngle = Math.PI / 6,
+) => {
+  const cosCreaseAngle = Math.cos(creaseAngle);
+  const edgeCount = loops.reduce((sum, loop) => sum + loop.length - 1, 0);
 
-  const startNormal = vec3.create();
-  const endNormal = vec3.create();
+  // Upper bound: every edge split from its neighbours
+  const maxCount = edgeCount * 2;
+  const shapeIndices = new Uint32Array(maxCount);
+  const normals = new Float32Array(maxCount * 3);
+  const u = new Float32Array(maxCount);
+  const cells = new Uint32Array(edgeCount * 2);
 
-  const writeVertex = (index, wallNormal, u, v) => {
-    const vertex = indices.vertex++;
-    avec3.set(geometry.positions, vertex, positions, index);
-    avec3.addScaled(geometry.positions, vertex, normal, 0, v ? end : start);
-    avec3.set(geometry.normals, vertex, wallNormal, 0);
-    avec2.set2(geometry.uvs, vertex, u / perimeter, v);
+  let count = 0;
+  let cellIndex = 0;
+
+  for (const loop of loops) {
+    const loopEdgeCount = loop.length - 1;
+    const closed = loop[0] === loop[loopEdgeCount];
+    const { edgeNormals, distances } = computeLoopEdges(
+      positions,
+      loop,
+      normal,
+    );
+    const perimeter = distances[loopEdgeCount];
+
+    const addColumn = (i, edge, neighbour) => {
+      shapeIndices[count] = loop[i];
+      u[count] = distances[i] / perimeter;
+      computeWallNormal(
+        normals,
+        count,
+        edgeNormals,
+        edge,
+        neighbour,
+        cosCreaseAngle,
+      );
+      return count++;
+    };
+
+    // The first column is never shared: open end or u seam
+    let column = -1;
+    for (let i = 0; i < loopEdgeCount; i++) {
+      const previous = i > 0 ? i - 1 : closed ? loopEdgeCount - 1 : -1;
+      const next = i < loopEdgeCount - 1 ? i + 1 : closed ? 0 : -1;
+      if (i === 0 || !isSmooth(edgeNormals, i, previous, cosCreaseAngle)) {
+        column = addColumn(i, i, previous);
+      }
+      cells[cellIndex++] = column;
+      cells[cellIndex++] = column = addColumn(i + 1, i, next);
+    }
+  }
+
+  return {
+    shapeIndices: shapeIndices.subarray(0, count),
+    normals: normals.subarray(0, count * 3),
+    u: u.subarray(0, count),
+    cells,
   };
+};
 
-  for (let i = 0; i < edgeCount; i++) {
-    const previous = i > 0 ? i - 1 : closed ? edgeCount - 1 : -1;
-    const next = i < edgeCount - 1 ? i + 1 : closed ? 0 : -1;
-    computeWallNormal(startNormal, edgeNormals, i, previous, cosCreaseAngle);
-    computeWallNormal(endNormal, edgeNormals, i, next, cosCreaseAngle);
+const computeWalls = (geometry, positions, columns, wall, indices) => {
+  const { normal, start, end, flip } = wall;
+  const count = columns.shapeIndices.length;
+  const offset = indices.vertex;
 
-    const a = indices.vertex;
-    writeVertex(loop[i], startNormal, distances[i], 0);
-    writeVertex(loop[i], startNormal, distances[i], 1);
-    writeVertex(loop[i + 1], endNormal, distances[i + 1], 0);
-    writeVertex(loop[i + 1], endNormal, distances[i + 1], 1);
+  for (const [ring, displacement] of [start, end].entries()) {
+    for (let i = 0; i < count; i++) {
+      const vertex = offset + ring * count + i;
+      avec3.set(geometry.positions, vertex, positions, columns.shapeIndices[i]);
+      avec3.addScaled(geometry.positions, vertex, normal, 0, displacement);
+      avec3.set(geometry.normals, vertex, columns.normals, i);
+      avec2.set2(geometry.uvs, vertex, columns.u[i], ring);
+    }
+  }
 
-    // Loops follow the start cap winding: [a, a', b] faces outward
-    setTriangle(geometry.cells, indices.cell, a, a + 1, a + 2, flip);
-    setTriangle(geometry.cells, indices.cell + 3, a + 1, a + 3, a + 2, flip);
+  // Loops follow the start cap winding: [a, a', b] faces outward
+  for (let i = 0; i < columns.cells.length; i += 2) {
+    const a = offset + columns.cells[i];
+    const b = offset + columns.cells[i + 1];
+    setTriangle(geometry.cells, indices.cell, a, a + count, b, flip);
+    setTriangle(
+      geometry.cells,
+      indices.cell + 3,
+      a + count,
+      b + count,
+      b,
+      flip,
+    );
     indices.cell += 6;
   }
+
+  indices.vertex += count * 2;
 };
 
 /**
@@ -463,13 +541,14 @@ const geomExtrude = (
     closed,
   });
 
-  const wallEdgeCount = loops.reduce((sum, loop) => sum + loop.length - 1, 0);
+  const columns = computeColumns(positions, loops, normal, creaseAngle);
+  const wallEdgeCount = columns.cells.length / 2;
   // Open polylines only: no cap triangles to place
   const capCount = cells.length ? Number(capStart) + Number(capEnd) : 0;
 
-  // Walls don't share vertices with the caps nor across edges: they need
-  // their own normals and uvs
-  const vertexCount = count * capCount + wallEdgeCount * 4;
+  // Walls don't share vertices with the caps: they need their own normals and
+  // uvs
+  const vertexCount = count * capCount + columns.shapeIndices.length * 2;
 
   const geometry = {
     positions: new Float32Array(vertexCount * 3),
@@ -506,21 +585,18 @@ const geomExtrude = (
     }
   }
 
-  const wall = {
-    normal,
-    start,
-    end,
-    flip,
-    cosCreaseAngle: Math.cos(creaseAngle),
-  };
-  for (const loop of loops) {
-    computeWall(geometry, positions, loop, wall, indices);
-  }
+  computeWalls(
+    geometry,
+    positions,
+    columns,
+    { normal, start, end, flip },
+    indices,
+  );
 
   return geometry;
 };
 
-export { computeBoundary, computeProfile };
+export { computeBoundary, computeColumns, computeProfile };
 
 export default geomExtrude;
 

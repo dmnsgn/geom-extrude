@@ -28,6 +28,15 @@
  */
 
 /**
+ * @typedef {object} Columns Wall cross-section of profile loops.
+ * @property {Uint32Array} shapeIndices Shape vertex of each column.
+ * @property {Float32Array} normals Wall normal of each column, in the shape
+ *   plane.
+ * @property {Float32Array} u Distance along its loop over the loop perimeter.
+ * @property {Uint32Array} cells Pairs of columns, one per loop edge.
+ */
+
+/**
  * @callback CapMappingFn Write the uv of the vertex at `index`. Subset of
  *   primitive-geometry's `MappingFn`, without `spherical`.
  * @param {object} mappingOptions
