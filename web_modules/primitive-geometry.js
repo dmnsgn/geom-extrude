@@ -224,7 +224,7 @@ let TYPED_ARRAY_TYPE;
 /**
 * Enforce a typed array constructor for cells.
 *
-* @param {Class<Uint8Array> | Class<Uint16Array> | Class<Uint32Array>} type
+* @param {Uint8ArrayConstructor | Uint16ArrayConstructor | Uint32ArrayConstructor} type
 */
 function setTypedArrayType(type) {
 	TYPED_ARRAY_TYPE = type;
@@ -626,6 +626,8 @@ var mappings_exports = /* @__PURE__ */ __exportAll({
 * @param {number} [mappingOptions.index]
 * @param {number} [mappingOptions.x]
 * @param {number} [mappingOptions.y]
+* @param {number} [mappingOptions.u]
+* @param {number} [mappingOptions.v]
 * @param {number} [mappingOptions.radius]
 * @param {number} [mappingOptions.nx]
 * @param {number} [mappingOptions.ny]
@@ -636,13 +638,14 @@ var mappings_exports = /* @__PURE__ */ __exportAll({
 * @param {number} [mappingOptions.radiusRatio]
 * @param {number} [mappingOptions.thetaRatio]
 * @param {number} [mappingOptions.perimeter] Cap rim length, solid caps only
+* @returns {void}
 */
 const safeSqrt = (x) => Math.sqrt(Math.max(x, 0));
 const safeDivide = (x, y) => x / (y + Number.EPSILON);
 const isNegligeable = (x) => Math.abs(x) < Number.EPSILON * 2;
 const remapRectangular = (x, radius) => (x / radius + 1) / 2;
 const remap = (x) => (x + 1) / 2;
-/** @type {MappingsFn} */
+/** @type {MappingFn} */
 function rectangular({ uvs, index, x, y, radius, sx = 1, sy = 1 }) {
 	uvs[index] = remapRectangular(x, radius * sx);
 	uvs[index + 1] = remapRectangular(y, radius * sy);
@@ -651,30 +654,30 @@ function rectangular({ uvs, index, x, y, radius, sx = 1, sy = 1 }) {
 * Solid caps only: centered, undistorted and at the same scale as the body's u
 * around the rim.
 *
-* @type {MappingsFn}
+* @type {MappingFn}
 */
 function circumferential({ uvs, index, x, y, perimeter }) {
 	uvs[index] = .5 + x / perimeter;
 	uvs[index + 1] = .5 + y / perimeter;
 }
-/** @type {MappingsFn} */
+/** @type {MappingFn} */
 function polar({ uvs, index, radiusRatio, thetaRatio }) {
 	uvs[index] = radiusRatio;
 	uvs[index + 1] = thetaRatio;
 }
-/** @type {MappingsFn} */
+/** @type {MappingFn} */
 function spherical({ uvs, index, nx, ny, nz }) {
 	uvs[index] = -Math.atan2(nz, nx) / TAU + .5;
 	uvs[index + 1] = Math.asin(Math.min(1, Math.max(-1, ny))) / Math.PI + .5;
 }
-/** @type {MappingsFn} */
+/** @type {MappingFn} */
 function radial({ uvs, index, u, v }) {
 	const x = safeDivide(Math.sqrt(u ** 2 + v ** 2), Math.max(Math.abs(u), Math.abs(v)));
 	uvs[index] = remap(x * u);
 	uvs[index + 1] = remap(x * v);
 }
 const FOUR_OVER_PI = 4 / Math.PI;
-/** @type {MappingsFn} */
+/** @type {MappingFn} */
 function concentric({ uvs, index, u, v }) {
 	const u2 = u ** 2;
 	const v2 = v ** 2;
@@ -687,14 +690,14 @@ function concentric({ uvs, index, u, v }) {
 		uvs[index + 1] = remap(x * Math.sign(v));
 	}
 }
-/** @type {MappingsFn} */
+/** @type {MappingFn} */
 function lamé({ uvs, index, u, v }) {
 	const u2 = u ** 2;
 	const v2 = v ** 2;
 	uvs[index] = remap(Math.sign(u) * Math.abs(u) ** (1 - u2 - v2));
 	uvs[index + 1] = remap(Math.sign(v) * Math.abs(v) ** (1 - u2 - v2));
 }
-/** @type {MappingsFn} */
+/** @type {MappingFn} */
 function elliptical({ uvs, index, u, v }) {
 	const t = u ** 2 - v ** 2;
 	const pu1 = .5 * safeSqrt(2 + t + 2 * SQRT2 * u);
@@ -710,7 +713,7 @@ function fixFGSingularities(uvs, index, u, v) {
 		uvs[index + 1] = remap(v);
 	} else return true;
 }
-/** @type {MappingsFn} */
+/** @type {MappingFn} */
 function fgSquircular({ uvs, index, u, v }) {
 	if (!fixFGSingularities(uvs, index, u, v)) return;
 	const u2 = u ** 2;
@@ -721,7 +724,7 @@ function fgSquircular({ uvs, index, u, v }) {
 	uvs[index] = remap(sign / (v * SQRT2) * sqrtUV);
 	uvs[index + 1] = remap(sign / (u * SQRT2) * sqrtUV);
 }
-/** @type {MappingsFn} */
+/** @type {MappingFn} */
 function twoSquircular({ uvs, index, u, v }) {
 	if (!fixFGSingularities(uvs, index, u, v)) return;
 	const sign = Math.sign(u * v);
@@ -729,7 +732,7 @@ function twoSquircular({ uvs, index, u, v }) {
 	uvs[index] = remap(sign / (v * SQRT2) * sqrtUV);
 	uvs[index + 1] = remap(sign / (u * SQRT2) * sqrtUV);
 }
-/** @type {MappingsFn} */
+/** @type {MappingFn} */
 function threeSquircular({ uvs, index, u, v }) {
 	if (!fixFGSingularities(uvs, index, u, v)) return;
 	const u2 = u ** 2;
@@ -739,7 +742,7 @@ function threeSquircular({ uvs, index, u, v }) {
 	uvs[index] = remap(sign / v * sqrtUV);
 	uvs[index + 1] = remap(sign / u * sqrtUV);
 }
-/** @type {MappingsFn} */
+/** @type {MappingFn} */
 function cornerificTapered2({ uvs, index, u, v }) {
 	if (!fixFGSingularities(uvs, index, u, v)) return;
 	const u2 = u ** 2;
@@ -750,7 +753,7 @@ function cornerificTapered2({ uvs, index, u, v }) {
 	uvs[index] = remap(sign / v * sqrtUV);
 	uvs[index + 1] = remap(sign / u * sqrtUV);
 }
-/** @type {MappingsFn} */
+/** @type {MappingFn} */
 function tapered4({ uvs, index, u, v }) {
 	if (!fixFGSingularities(uvs, index, u, v)) return;
 	const u2 = u ** 2;
@@ -763,7 +766,7 @@ function tapered4({ uvs, index, u, v }) {
 	uvs[index + 1] = remap(sign / u * sqrtUV);
 }
 const FOURTH_SQRT2 = 2 ** (1 / 4);
-/** @type {MappingsFn} */
+/** @type {MappingFn} */
 function nonAxial2Pinch({ uvs, index, u, v }) {
 	const u2 = u ** 2;
 	const v2 = v ** 2;
@@ -778,7 +781,7 @@ function nonAxial2Pinch({ uvs, index, u, v }) {
 		uvs[index + 1] = remap(isNegligeable(u) ? Math.sign(v) * Math.sqrt(Math.abs(v)) : safeDivide(sign, u * FOURTH_SQRT2) * sqrtUV);
 	}
 }
-/** @type {MappingsFn} */
+/** @type {MappingFn} */
 function nonAxialHalfPinch({ uvs, index, u, v }) {
 	const u2 = u ** 2;
 	const v2 = v ** 2;
@@ -793,7 +796,7 @@ function nonAxialHalfPinch({ uvs, index, u, v }) {
 		uvs[index + 1] = remap(isNegligeable(u) ? Math.sign(v) * v2 : safeDivide(sign, u) * sqrtUV);
 	}
 }
-/** @type {MappingsFn} */
+/** @type {MappingFn} */
 function squelched({ uvs, index, u, v, t }) {
 	uvs[index] = [HALF_PI, TAU - HALF_PI].includes(t) ? .5 : remap(u / Math.sqrt(1 - v ** 2));
 	uvs[index + 1] = [
@@ -802,7 +805,7 @@ function squelched({ uvs, index, u, v, t }) {
 		Math.PI
 	].includes(t) ? .5 : remap(v / Math.sqrt(1 - u ** 2));
 }
-/** @type {MappingsFn} */
+/** @type {MappingFn} */
 function squelchedVertical({ uvs, index, u, v, t }) {
 	uvs[index] = remap(u);
 	uvs[index + 1] = [
@@ -811,7 +814,7 @@ function squelchedVertical({ uvs, index, u, v, t }) {
 		Math.PI
 	].includes(t) ? .5 : remap(v / Math.sqrt(1 - u ** 2));
 }
-/** @type {MappingsFn} */
+/** @type {MappingFn} */
 function squelchedHorizontal({ uvs, index, u, v, t }) {
 	uvs[index] = [HALF_PI, TAU - HALF_PI].includes(t) ? .5 : remap(u / Math.sqrt(1 - v ** 2));
 	uvs[index + 1] = remap(v);
@@ -917,6 +920,19 @@ function computeRingCells(cells, indices, { ringOffset, cols, segments, centroid
 * angle.
 *
 * @private
+* @param {object} [options={}]
+* @param {number} [options.sx=1]
+* @param {number} [options.sy=1]
+* @param {number} [options.radius=0.5]
+* @param {number} [options.segments=32]
+* @param {number} [options.innerSegments=16]
+* @param {number} [options.theta=TAU]
+* @param {number} [options.thetaOffset=0]
+* @param {number} [options.innerRadius=0]
+* @param {boolean} [options.mergeCentroid=true]
+* @param {boolean} [options.mergeSeam=true]
+* @param {import("../mappings.js").MappingFn} options.mapping
+* @param {import("../plane/circular/ellipse.js").EllipseEquationFn} [options.equation]
 */
 function computePolarGeometry({ sx = 1, sy = 1, radius = .5, segments = 32, innerSegments = 16, theta = TAU, thetaOffset = 0, innerRadius = 0, mergeCentroid = true, mergeSeam = true, mapping, equation = ({ rx, ry, cosTheta, sinTheta }) => [rx * cosTheta, ry * sinTheta] } = {}) {
 	const closed = computeColumnCount(segments, theta) === segments;
@@ -2853,7 +2869,7 @@ function yinYang({ radius = .5, dotRadius = radius / 6, part = "yin-yang", segme
 * @param {number} sample.sinTheta
 * @param {number} sample.s Radius ratio (0..1, innerRadius to radius)
 * @param {number} sample.t Angle
-* @returns {[x, y]}
+* @returns {[x: number, y: number]}
 */
 /**
 * An ellipse (or circle when `sx = sy`).
@@ -3921,6 +3937,23 @@ function computeGridQuad(cells, indices, [a, b, c, d], flip) {
 	indices.cell += 6;
 }
 /**
+* @private
+* @callback RevolutionEquationFn
+* @param {object} sample
+* @param {number} sample.v
+* @param {number} sample.cosPhi
+* @param {number} sample.sinPhi
+* @returns {RevolutionSample}
+*/
+/**
+* @private
+* @typedef {object} RevolutionSample
+* @property {number[]} position
+* @property {number[]} normal
+* @property {boolean} [collapsed] Row pinched to the axis
+* @property {number} [v] Uv v override
+*/
+/**
 * Meridian rows by angular columns, revolved around y.
 *
 * - `equation({ v, cosPhi, sinPhi })` returns a vertex's `position`, `normal`,
@@ -3932,6 +3965,20 @@ function computeGridQuad(cells, indices, [a, b, c, d], flip) {
 * - `capBase`/`capApex` add flat disks at uncollapsed ends.
 *
 * @private
+* @param {object} [options={}]
+* @param {number} [options.nx=32]
+* @param {number} [options.ny=16]
+* @param {number} [options.phi=TAU]
+* @param {number} [options.phiOffset=0]
+* @param {boolean} [options.capBase=false]
+* @param {boolean} [options.capApex=false]
+* @param {number} [options.capSegments=1]
+* @param {number} [options.capBaseSegments=capSegments]
+* @param {number} [options.capApexSegments=capSegments]
+* @param {import("../mappings.js").MappingFn} [options.capMapping]
+* @param {import("./distribution.js").DistributionFn} [options.vDistribution=linear]
+* @param {boolean} [options.mergeSeam=false]
+* @param {RevolutionEquationFn} options.equation
 */
 function computeRevolutionGeometry({ nx = 32, ny = 16, phi = TAU, phiOffset = 0, capBase = false, capApex = false, capSegments = 1, capBaseSegments = capSegments, capApexSegments = capSegments, capMapping, vDistribution = linear, mergeSeam = false, equation } = {}) {
 	const wrap = phi % TAU === 0;

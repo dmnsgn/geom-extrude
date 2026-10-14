@@ -52,12 +52,12 @@
   "dependencies": {
     "earcut": "^3.2.4",
     "pex-math": "^4.4.0",
-    "primitive-geometry": "^3.2.1"
+    "primitive-geometry": "^3.2.2"
   },
   "devDependencies": {
     "es-module-shims": "^2.8.4",
     "geom-edges": "^2.0.0",
-    "geom-merge": "^3.0.0",
+    "geom-merge": "^3.1.0",
     "pex-cam": "^3.0.1",
     "pex-gpu": "^0.0.4",
     "tweakpane": "^4.0.5"
