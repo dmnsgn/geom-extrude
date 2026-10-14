@@ -1,6 +1,6 @@
 {
   "name": "geom-extrude",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Extrude a planar simplicial complex or closed polylines into a solid with caps, walls, normals and uvs.",
   "keywords": [
     "geom",

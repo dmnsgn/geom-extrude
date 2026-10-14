@@ -349,8 +349,7 @@ const computeProfile = (
  * Compute cap uvs in the profile plane, scaled to its longest loop so they
  * match walls wrapping u once around each loop.
  *
- * Caps don't split vertices: angle based mappings (eg. polar) show a wrap
- * seam.
+ * Caps don't split vertices: angle based mappings (eg. polar) show a wrap seam.
  *
  * @param {Float32Array} positions
  * @param {import("./types.js").Profile} profile
