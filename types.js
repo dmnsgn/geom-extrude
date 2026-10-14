@@ -19,6 +19,15 @@
  */
 
 /**
+ * @typedef {object} Profile A planar shape analyzed for extrusion.
+ * @property {number[]} normal Side the shape faces.
+ * @property {TypedArrayLike} cells Cap triangles, counter-clockwise around the
+ *   normal.
+ * @property {number[][]} loops Wall loops repeating their first index:
+ *   counter-clockwise around solids, clockwise around holes.
+ */
+
+/**
  * @callback CapMappingFn Write the uv of the vertex at `index`. Subset of
  *   primitive-geometry's `MappingFn`, without `spherical`.
  * @param {object} mappingOptions

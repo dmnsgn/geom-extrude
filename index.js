@@ -252,6 +252,25 @@ const fromPolylines = (positions, polylines, direction) => {
   };
 };
 
+/**
+ * Analyze a planar shape: the side it faces, its cap triangles and its wall
+ * loops, holes included.
+ *
+ * Only `direction` and `ignoreSeams` options apply.
+ *
+ * @param {import("./types.js").SimplicialComplex
+ *   | import("./types.js").PolylineComplex} shape
+ * @param {import("./types.js").GeomExtrudeOptions} [options={}]
+ * @returns {import("./types.js").Profile}
+ */
+const computeProfile = (
+  { positions, cells },
+  { direction = "z", ignoreSeams = true } = {},
+) =>
+  typeof cells[0] === "number"
+    ? fromTriangles(positions, cells, direction, ignoreSeams)
+    : fromPolylines(positions, cells, direction);
+
 // Caps don't split vertices: angle based mappings (eg. polar) show a wrap seam
 const computeCapUvs = (positions, normal, perimeter, mapping) => {
   const points = projectPositions(positions, normal);
@@ -425,10 +444,10 @@ const geomExtrude = (
 ) => {
   const { positions } = shape;
   const count = positions.length / 3;
-  const { normal, cells, loops } =
-    typeof shape.cells[0] === "number"
-      ? fromTriangles(positions, shape.cells, direction, ignoreSeams)
-      : fromPolylines(positions, shape.cells, direction);
+  const { normal, cells, loops } = computeProfile(shape, {
+    direction,
+    ignoreSeams,
+  });
 
   const wallEdgeCount = loops.reduce((sum, loop) => sum + loop.length - 1, 0);
   const capCount = Number(capStart) + Number(capEnd);
@@ -486,7 +505,7 @@ const geomExtrude = (
   return geometry;
 };
 
-export { computeBoundary };
+export { computeBoundary, computeProfile };
 
 export default geomExtrude;
 

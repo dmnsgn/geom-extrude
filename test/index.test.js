@@ -15,7 +15,7 @@ import {
   starPath,
 } from "primitive-geometry";
 
-import geomExtrude, { computeBoundary } from "../index.js";
+import geomExtrude, { computeBoundary, computeProfile } from "../index.js";
 import { GLYPHS, glyph } from "../examples/glyph.js";
 import { analyze, area, assertArrayClose, bounds, close } from "./helpers.js";
 
@@ -63,6 +63,42 @@ describe("computeBoundary", () => {
     assert.deepEqual(edgeCounts(GLYPHS["%"]), [4, 4, 4, 4, 4, 4, 8, 8]);
     // Each fan joins an outer edge to a hole edge: a single loop through both
     assert.deepEqual(edgeCounts(GLYPHS[4]), [26]);
+  });
+});
+
+describe("computeProfile", () => {
+  const signedArea = ({ positions }, loop) => {
+    let sum = 0;
+    for (let i = 0; i < loop.length - 1; i++) {
+      const a = loop[i] * 3;
+      const b = loop[i + 1] * 3;
+      sum += positions[a] * positions[b + 1] - positions[b] * positions[a + 1];
+    }
+    return sum / 2;
+  };
+
+  it("winds solids counter-clockwise and holes clockwise", () => {
+    for (const [name, shape] of Object.entries({
+      annulus: annulus(),
+      annulusPath: annulusPath(),
+    })) {
+      const { normal, cells, loops } = computeProfile(shape);
+      assert.deepEqual(Array.from(normal), [0, 0, 1], name);
+      assert.ok(cells.length > 0 && cells.length % 3 === 0, name);
+      assert.equal(loops.length, 2, name);
+
+      const [solid, hole] = loops
+        .map((loop) => signedArea(shape, loop))
+        .sort((a, b) => Math.abs(b) - Math.abs(a));
+      assert.ok(solid > 0, name);
+      assert.ok(hole < 0, name);
+    }
+  });
+
+  it("closes loops with their first index", () => {
+    for (const loop of computeProfile(annulusPath()).loops) {
+      assert.equal(loop[0], loop.at(-1));
+    }
   });
 });
 
