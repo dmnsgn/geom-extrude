@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [2.0.1](https://github.com/dmnsgn/geom-extrude/compare/v2.0.0...v2.0.1) (2026-10-14)
+
+### Bug Fixes
+
+* keep forced closed two-point loops open ([70deab9](https://github.com/dmnsgn/geom-extrude/commit/70deab99aa0ad94059a683c574bdbe706c431213))
+
 # [2.0.0](https://github.com/dmnsgn/geom-extrude/compare/v1.0.0...v2.0.0) (2026-10-14)
 
 ### Bug Fixes
