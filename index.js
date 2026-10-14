@@ -15,6 +15,36 @@ const DIRECTIONS = {
   "-z": [0, 0, -1],
 };
 
+const GENERATED_ATTRIBUTES = ["positions", "normals", "uvs", "cells"];
+
+const isFlatArray = (attribute) =>
+  (Array.isArray(attribute) || ArrayBuffer.isView(attribute)) &&
+  !attribute[0]?.length;
+
+// Told apart by length only: a multiple of the vertex count
+const getVertexAttributes = (shape, vertexCount) =>
+  Object.entries(shape)
+    .filter(
+      ([name, source]) =>
+        !GENERATED_ATTRIBUTES.includes(name) &&
+        isFlatArray(source) &&
+        source.length &&
+        source.length % vertexCount === 0,
+    )
+    .map(([name, source]) => ({
+      name,
+      source,
+      size: source.length / vertexCount,
+    }));
+
+const copyAttributes = (geometry, attributes, vertex, shapeIndex) => {
+  for (const { name, source, size } of attributes) {
+    for (let k = 0; k < size; k++) {
+      geometry[name][vertex * size + k] = source[shapeIndex * size + k];
+    }
+  }
+};
+
 const setTriangle = (cells, index, a, b, c, flip) => {
   cells[index] = a;
   cells[index + 1] = flip ? c : b;
@@ -328,7 +358,13 @@ const computeCapUvs = (positions, normal, perimeter, mapping) => {
   return uvs;
 };
 
-const computeCap = (geometry, { positions, cells }, uvs, cap, indices) => {
+const computeCap = (
+  geometry,
+  { positions, cells, attributes },
+  uvs,
+  cap,
+  indices,
+) => {
   const { normal, displacement, side, flip } = cap;
   const offset = indices.vertex;
   const count = positions.length / 3;
@@ -340,6 +376,9 @@ const computeCap = (geometry, { positions, cells }, uvs, cap, indices) => {
     avec3.scale(geometry.normals, offset + i, side);
   }
   geometry.uvs.set(uvs, offset * 2);
+  for (const { name, source, size } of attributes) {
+    geometry[name].set(source, offset * size);
+  }
 
   for (let i = 0; i < cells.length; i += 3) {
     setTriangle(
@@ -510,7 +549,13 @@ const stitchRings = (
   return index;
 };
 
-const computeWalls = (geometry, positions, columns, wall, indices) => {
+const computeWalls = (
+  geometry,
+  { positions, attributes },
+  columns,
+  wall,
+  indices,
+) => {
   const { normal, start, end, ringCount, flip } = wall;
   const count = columns.shapeIndices.length;
   const vertexOffset = indices.vertex;
@@ -525,6 +570,7 @@ const computeWalls = (geometry, positions, columns, wall, indices) => {
       avec3.addScaled(geometry.positions, vertex, normal, 0, displacement);
       avec3.set(geometry.normals, vertex, columns.normals, i);
       avec2.set2(geometry.uvs, vertex, columns.u[i], v);
+      copyAttributes(geometry, attributes, vertex, columns.shapeIndices[i]);
     }
   }
 
@@ -546,6 +592,9 @@ const computeWalls = (geometry, positions, columns, wall, indices) => {
  *
  * Walls wrap u once around each loop and v from start to end. Caps keep the
  * shape uvs unless a `capMapping` is set or the shape has none.
+ *
+ * Other per-vertex shape attributes (eg. `vertexColors`) are copied to the
+ * caps and walls, keeping their array type.
  *
  * @param {import("./types.js").SimplicialComplex
  *   | import("./types.js").PolylineComplex} shape
@@ -587,6 +636,8 @@ const geomExtrude = (
   const vertexCount =
     count * capCount + columns.shapeIndices.length * ringCount;
 
+  const attributes = getVertexAttributes(shape, count);
+
   const geometry = {
     positions: new Float32Array(vertexCount * 3),
     normals: new Float32Array(vertexCount * 3),
@@ -595,6 +646,12 @@ const geomExtrude = (
       cells.length * capCount + wallEdgeCount * wallSegments * 6,
     ),
   };
+  for (const { name, source, size } of attributes) {
+    const TypedArray = ArrayBuffer.isView(source)
+      ? source.constructor
+      : Float32Array;
+    geometry[name] = new TypedArray(vertexCount * size);
+  }
   const indices = { vertex: 0, cell: 0 };
 
   const start = center ? thickness / 2 : 0;
@@ -613,7 +670,7 @@ const geomExtrude = (
         // Walls wrap u once around each loop: caps match that scale
         capMapping || mappings.circumferential,
       );
-    const triangles = { positions, cells };
+    const triangles = { positions, cells, attributes };
     const cap = { normal, displacement: start, side, flip };
     if (capStart) computeCap(geometry, triangles, uvs, cap, indices);
     if (capEnd) {
@@ -624,7 +681,7 @@ const geomExtrude = (
 
   computeWalls(
     geometry,
-    positions,
+    { positions, attributes },
     columns,
     { normal, start, end, ringCount, flip },
     indices,

@@ -401,6 +401,30 @@ describe("geomExtrude", () => {
     assert.deepEqual([...vs].sort(), [0, 0.25, 0.5, 0.75, 1]);
   });
 
+  it("copies per-vertex shape attributes to caps and walls", () => {
+    for (const shape of [disc(), starPath({ closed: true })]) {
+      const count = shape.positions.length / 3;
+      const ids = Uint16Array.from({ length: count }, (_, i) => i);
+      const geometry = geomExtrude(
+        { ...shape, ids, offsets: [0, 0, 0], name: "shape" },
+        { wallSegments: 2 },
+      );
+
+      assert.ok(geometry.ids instanceof Uint16Array);
+      assert.equal(geometry.ids.length, geometry.positions.length / 3);
+      assert.equal(geometry.offsets, undefined);
+      assert.equal(geometry.name, undefined);
+      for (let i = 0; i < geometry.ids.length; i++) {
+        const id = geometry.ids[i];
+        assert.equal(geometry.positions[i * 3], shape.positions[id * 3]);
+        assert.equal(
+          geometry.positions[i * 3 + 1],
+          shape.positions[id * 3 + 1],
+        );
+      }
+    }
+  });
+
   it("splits wall normals at creases", () => {
     const radialError = (geometry, shape) => {
       let error = 0;
