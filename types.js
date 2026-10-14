@@ -11,6 +11,11 @@
  */
 
 /**
+ * @typedef {Object<string, ArrayLike<any>>} VertexAttributes Other flat
+ *   per-vertex arrays (eg. `vertexColors`), copied to the extruded geometry.
+ */
+
+/**
  * @typedef {object} PolylineComplex Polyline cells over shared positions: each
  *   cell is an open polyline; closed loops repeat their first index at the
  *   end.
@@ -18,13 +23,17 @@
  * @property {TypedArrayLike[]} cells
  */
 
+/** @typedef {SimplicialComplex & VertexAttributes} SimplicialShape */
+
+/** @typedef {PolylineComplex & VertexAttributes} PolylineShape */
+
 /**
  * @typedef {object} Profile A planar shape analyzed for extrusion.
  * @property {number[]} normal Side the shape faces.
  * @property {TypedArrayLike} cells Cap triangles, counter-clockwise around the
  *   normal.
- * @property {number[][]} loops Wall loops. Closed ones repeat their first
- *   index and wind counter-clockwise around solids, clockwise around holes.
+ * @property {number[][]} loops Wall loops. Closed ones repeat their first index
+ *   and wind counter-clockwise around solids, clockwise around holes.
  */
 
 /**
@@ -73,9 +82,9 @@
  * @property {boolean} [ignoreSeams=true] Treat vertices at the exact same
  *   position as connected when finding the boundary, so split seams (eg.
  *   `mergeSeam: false`) don't get walls. Caps keep their split vertices.
- * @property {boolean | "auto"} [closed="auto"] Close PolylineComplex cells
- *   into capped loops. `"auto"` only closes the ones ending on their first
- *   index or position.
+ * @property {boolean | "auto"} [closed="auto"] Close PolylineComplex cells into
+ *   capped loops. `"auto"` only closes the ones ending on their first index or
+ *   position.
  * @property {number} [wallSegments=1] Subdivisions of the walls from the start
  *   cap to the end cap.
  */

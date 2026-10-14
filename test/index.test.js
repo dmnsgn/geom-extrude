@@ -405,13 +405,30 @@ describe("geomExtrude", () => {
     for (const shape of [disc(), starPath({ closed: true })]) {
       const count = shape.positions.length / 3;
       const ids = Uint16Array.from({ length: count }, (_, i) => i);
+      const colors = Float32Array.from({ length: count * 4 }, (_, i) => i);
+      // Beyond Float32 integer precision
+      const labels = Array.from({ length: count }, (_, i) => 2 ** 24 + 1 + i);
+      const nested = Array.from({ length: count }, () => [0, 0, 0, 1]);
       const geometry = geomExtrude(
-        { ...shape, ids, offsets: [0, 0, 0], name: "shape" },
+        {
+          ...shape,
+          ids,
+          colors,
+          labels,
+          nested,
+          offsets: [0, 0, 0],
+          name: "shape",
+        },
         { wallSegments: 2 },
       );
 
       assert.ok(geometry.ids instanceof Uint16Array);
+      assert.ok(geometry.colors instanceof Float32Array);
+      assert.ok(Array.isArray(geometry.labels));
       assert.equal(geometry.ids.length, geometry.positions.length / 3);
+      assert.equal(geometry.colors.length, geometry.ids.length * 4);
+      assert.equal(geometry.labels.length, geometry.ids.length);
+      assert.equal(geometry.nested, undefined);
       assert.equal(geometry.offsets, undefined);
       assert.equal(geometry.name, undefined);
       for (let i = 0; i < geometry.ids.length; i++) {
@@ -421,6 +438,11 @@ describe("geomExtrude", () => {
           geometry.positions[i * 3 + 1],
           shape.positions[id * 3 + 1],
         );
+        assert.deepEqual(
+          geometry.colors.subarray(i * 4, i * 4 + 4),
+          colors.subarray(id * 4, id * 4 + 4),
+        );
+        assert.equal(geometry.labels[i], labels[id]);
       }
     }
   });

@@ -15,7 +15,7 @@ const DIRECTIONS = {
   "-z": [0, 0, -1],
 };
 
-const GENERATED_ATTRIBUTES = ["positions", "normals", "uvs", "cells"];
+const GENERATED_ATTRIBUTES = new Set(["positions", "normals", "uvs", "cells"]);
 
 const isFlatArray = (attribute) =>
   (Array.isArray(attribute) || ArrayBuffer.isView(attribute)) &&
@@ -26,7 +26,7 @@ const getVertexAttributes = (shape, vertexCount) =>
   Object.entries(shape)
     .filter(
       ([name, source]) =>
-        !GENERATED_ATTRIBUTES.includes(name) &&
+        !GENERATED_ATTRIBUTES.has(name) &&
         isFlatArray(source) &&
         source.length &&
         source.length % vertexCount === 0,
@@ -37,10 +37,14 @@ const getVertexAttributes = (shape, vertexCount) =>
       size: source.length / vertexCount,
     }));
 
-const copyAttributes = (geometry, attributes, vertex, shapeIndex) => {
+// Shape vertex i, or shapeIndices[i], to vertex offset + i
+const copyAttributes = (geometry, attributes, offset, count, shapeIndices) => {
   for (const { name, source, size } of attributes) {
-    for (let k = 0; k < size; k++) {
-      geometry[name][vertex * size + k] = source[shapeIndex * size + k];
+    const target = geometry[name];
+    for (let i = 0; i < count; i++) {
+      const from = (shapeIndices ? shapeIndices[i] : i) * size;
+      const to = (offset + i) * size;
+      for (let k = 0; k < size; k++) target[to + k] = source[from + k];
     }
   }
 };
@@ -376,9 +380,7 @@ const computeCap = (
     avec3.scale(geometry.normals, offset + i, side);
   }
   geometry.uvs.set(uvs, offset * 2);
-  for (const { name, source, size } of attributes) {
-    geometry[name].set(source, offset * size);
-  }
+  copyAttributes(geometry, attributes, offset, count);
 
   for (let i = 0; i < cells.length; i += 3) {
     setTriangle(
@@ -570,8 +572,14 @@ const computeWalls = (
       avec3.addScaled(geometry.positions, vertex, normal, 0, displacement);
       avec3.set(geometry.normals, vertex, columns.normals, i);
       avec2.set2(geometry.uvs, vertex, columns.u[i], v);
-      copyAttributes(geometry, attributes, vertex, columns.shapeIndices[i]);
     }
+    copyAttributes(
+      geometry,
+      attributes,
+      vertexOffset + ring * count,
+      count,
+      columns.shapeIndices,
+    );
   }
 
   indices.cell = stitchRings(geometry.cells, columns, {
@@ -593,13 +601,14 @@ const computeWalls = (
  * Walls wrap u once around each loop and v from start to end. Caps keep the
  * shape uvs unless a `capMapping` is set or the shape has none.
  *
- * Other per-vertex shape attributes (eg. `vertexColors`) are copied to the
- * caps and walls, keeping their array type.
+ * Other flat per-vertex shape attributes (eg. `vertexColors`) are copied
+ * unchanged to the caps and walls, keeping their array type: direction
+ * dependent ones (eg. `tangents`) don't follow the walls and end cap
+ * orientation.
  *
- * @param {import("./types.js").SimplicialComplex
- *   | import("./types.js").PolylineComplex} shape
+ * @param {import("./types.js").SimplicialShape | import("./types.js").PolylineShape} shape
  * @param {import("./types.js").GeomExtrudeOptions} [options={}]
- * @returns {import("./types.js").SimplicialComplex}
+ * @returns {import("./types.js").SimplicialShape}
  * @alias module:geomExtrude
  */
 const geomExtrude = (
@@ -647,10 +656,7 @@ const geomExtrude = (
     ),
   };
   for (const { name, source, size } of attributes) {
-    const TypedArray = ArrayBuffer.isView(source)
-      ? source.constructor
-      : Float32Array;
-    geometry[name] = new TypedArray(vertexCount * size);
+    geometry[name] = new source.constructor(vertexCount * size);
   }
   const indices = { vertex: 0, cell: 0 };
 
