@@ -23,8 +23,8 @@
  * @property {number[]} normal Side the shape faces.
  * @property {TypedArrayLike} cells Cap triangles, counter-clockwise around the
  *   normal.
- * @property {number[][]} loops Wall loops repeating their first index:
- *   counter-clockwise around solids, clockwise around holes.
+ * @property {number[][]} loops Wall loops. Closed ones repeat their first
+ *   index and wind counter-clockwise around solids, clockwise around holes.
  */
 
 /**
@@ -64,6 +64,9 @@
  * @property {boolean} [ignoreSeams=true] Treat vertices at the exact same
  *   position as connected when finding the boundary, so split seams (eg.
  *   `mergeSeam: false`) don't get walls. Caps keep their split vertices.
+ * @property {boolean | "auto"} [closed="auto"] Close PolylineComplex cells
+ *   into capped loops. `"auto"` only closes the ones ending on their first
+ *   index or position.
  */
 
 export {};

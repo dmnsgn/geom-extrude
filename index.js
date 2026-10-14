@@ -225,30 +225,42 @@ const triangulateLoops = (positions, loops, normal) => {
   return cells;
 };
 
-const fromPolylines = (positions, polylines, direction) => {
-  // Assumed closed: drop the repeated first index, if any
-  const loops = polylines
+const fromPolylines = (positions, polylines, direction, closed) => {
+  const polylineLoops = polylines
     .map((polyline) => {
       const loop = Array.from(polyline);
-      if (loop[0] === loop.at(-1)) loop.pop();
-      return loop;
+      if (closed === false) return { loop, isClosed: false };
+
+      // Repeated first index or position: SVG-like paths duplicate the vertex
+      const isClosing =
+        loop.length > 1 &&
+        avec3.equals(positions, loop[0], positions, loop.at(-1));
+      if (isClosing) loop.pop();
+      return { loop, isClosed: closed === true || isClosing };
     })
-    .filter((loop) => loop.length > 2);
+    .filter(({ loop, isClosed }) => loop.length > (isClosed ? 2 : 1));
 
   // The largest loop encloses the others: holes can't flip it
   const normal =
     direction === "auto"
       ? normalizeOrZ(
-          loops
-            .map((loop) => computeAreaVector(positions, fan(loop)))
+          polylineLoops
+            .map(({ loop }) => computeAreaVector(positions, fan(loop)))
             .reduce((a, b) => (vec3.length(b) > vec3.length(a) ? b : a)),
         )
       : DIRECTIONS[direction];
 
+  // Only closed loops get capped
+  const closedLoops = polylineLoops
+    .filter(({ isClosed }) => isClosed)
+    .map(({ loop }) => loop);
+
   return {
     normal,
-    cells: triangulateLoops(positions, loops, normal),
-    loops: loops.map((loop) => [...loop, loop[0]]),
+    cells: triangulateLoops(positions, closedLoops, normal),
+    loops: polylineLoops.map(({ loop, isClosed }) =>
+      isClosed ? [...loop, loop[0]] : loop,
+    ),
   };
 };
 
@@ -256,7 +268,7 @@ const fromPolylines = (positions, polylines, direction) => {
  * Analyze a planar shape: the side it faces, its cap triangles and its wall
  * loops, holes included.
  *
- * Only `direction` and `ignoreSeams` options apply.
+ * Only `direction`, `ignoreSeams` and `closed` options apply.
  *
  * @param {import("./types.js").SimplicialComplex
  *   | import("./types.js").PolylineComplex} shape
@@ -265,11 +277,11 @@ const fromPolylines = (positions, polylines, direction) => {
  */
 const computeProfile = (
   { positions, cells },
-  { direction = "z", ignoreSeams = true } = {},
+  { direction = "z", ignoreSeams = true, closed = "auto" } = {},
 ) =>
   typeof cells[0] === "number"
     ? fromTriangles(positions, cells, direction, ignoreSeams)
-    : fromPolylines(positions, cells, direction);
+    : fromPolylines(positions, cells, direction, closed);
 
 // Caps don't split vertices: angle based mappings (eg. polar) show a wrap seam
 const computeCapUvs = (positions, normal, perimeter, mapping) => {
@@ -417,8 +429,8 @@ const computeWall = (geometry, positions, loop, wall, indices) => {
  * Extrude a planar shape into a solid: a start cap, an end cap and walls along
  * its boundary loops, holes included.
  *
- * A PolylineComplex shape is read as closed, non-intersecting loops: loops
- * nested an odd number of times are holes.
+ * A PolylineComplex shape is read as non-intersecting polylines: closed loops
+ * nested an odd number of times are holes, open polylines only get walls.
  *
  * Walls wrap u once around each loop and v from start to end. Caps keep the
  * shape uvs unless a `capMapping` is set or the shape has none.
@@ -440,6 +452,7 @@ const geomExtrude = (
     capMapping,
     creaseAngle = Math.PI / 6,
     ignoreSeams = true,
+    closed = "auto",
   } = {},
 ) => {
   const { positions } = shape;
@@ -447,10 +460,12 @@ const geomExtrude = (
   const { normal, cells, loops } = computeProfile(shape, {
     direction,
     ignoreSeams,
+    closed,
   });
 
   const wallEdgeCount = loops.reduce((sum, loop) => sum + loop.length - 1, 0);
-  const capCount = Number(capStart) + Number(capEnd);
+  // Open polylines only: no cap triangles to place
+  const capCount = cells.length ? Number(capStart) + Number(capEnd) : 0;
 
   // Walls don't share vertices with the caps nor across edges: they need
   // their own normals and uvs

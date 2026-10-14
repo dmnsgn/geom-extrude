@@ -80,7 +80,7 @@ describe("computeProfile", () => {
   it("winds solids counter-clockwise and holes clockwise", () => {
     for (const [name, shape] of Object.entries({
       annulus: annulus(),
-      annulusPath: annulusPath(),
+      annulusPath: annulusPath({ closed: true }),
     })) {
       const { normal, cells, loops } = computeProfile(shape);
       assert.deepEqual(Array.from(normal), [0, 0, 1], name);
@@ -96,9 +96,43 @@ describe("computeProfile", () => {
   });
 
   it("closes loops with their first index", () => {
-    for (const loop of computeProfile(annulusPath()).loops) {
+    for (const loop of computeProfile(annulusPath({ closed: true })).loops) {
       assert.equal(loop[0], loop.at(-1));
     }
+  });
+
+  it("closes polylines ending on their first index or position", () => {
+    const path = squarePath();
+    const positions = Float32Array.from([
+      ...path.positions,
+      ...path.positions.subarray(0, 3),
+    ]);
+    for (const [name, shape] of Object.entries({
+      index: squarePath({ closed: true }),
+      position: { positions, cells: [[0, 1, 2, 3, 4]] },
+    })) {
+      const { cells, loops } = computeProfile(shape);
+      assert.deepEqual(loops, [[0, 1, 2, 3, 0]], name);
+      assert.equal(cells.length, 6, name);
+    }
+  });
+
+  it("keeps open polylines uncapped", () => {
+    const { cells, loops } = computeProfile(squarePath());
+    assert.deepEqual(loops, [[0, 1, 2, 3]]);
+    assert.equal(cells.length, 0);
+  });
+
+  it("forces polylines open or closed", () => {
+    const open = computeProfile(squarePath({ closed: true }), {
+      closed: false,
+    });
+    assert.deepEqual(open.loops, [[0, 1, 2, 3, 0]]);
+    assert.equal(open.cells.length, 0);
+
+    const closed = computeProfile(squarePath(), { closed: true });
+    assert.deepEqual(closed.loops, [[0, 1, 2, 3, 0]]);
+    assert.equal(closed.cells.length, 6);
   });
 });
 
@@ -346,13 +380,12 @@ describe("geomExtrude", () => {
     it("is closed, outward facing and consistently shaded", () => {
       const thickness = 0.3;
       for (const [name, path] of Object.entries({
-        "starPath (open)": starPath(),
         starPath: starPath({ closed: true }),
         crossPath: crossPath({ closed: true }),
         squarePath: squarePath({ closed: true }),
-        annulusPath: annulusPath(),
-        "annulusPath (reversed)": reversed(annulusPath()),
-        "starPath (reversed)": reversed(starPath()),
+        annulusPath: annulusPath({ closed: true }),
+        "annulusPath (reversed)": reversed(annulusPath({ closed: true })),
+        "starPath (reversed)": reversed(starPath({ closed: true })),
       })) {
         const geometry = geomExtrude(path, { thickness });
         const { volume, openEdges, flippedNormals } = analyze(geometry);
@@ -365,14 +398,29 @@ describe("geomExtrude", () => {
       }
     });
 
+    it("extrudes open polylines into uncapped walls", () => {
+      const path = starPath();
+      const geometry = geomExtrude(path);
+      const edgeCount = path.cells[0].length - 1;
+      assert.equal(geometry.positions.length / 3, edgeCount * 4);
+      assert.equal(geometry.cells.length, edgeCount * 6);
+      assert.ok(analyze(geometry).openEdges > 0);
+
+      const closed = analyze(geomExtrude(path, { closed: true }));
+      assert.equal(closed.openEdges, 0);
+      assert.equal(closed.flippedNormals, 0);
+    });
+
     it("matches the filled shape volume", () => {
-      const fromPath = analyze(geomExtrude(annulusPath())).volume;
+      const fromPath = analyze(
+        geomExtrude(annulusPath({ closed: true })),
+      ).volume;
       const fromFill = analyze(geomExtrude(annulus())).volume;
       assert.ok(close(fromPath, fromFill, 1e-4));
     });
 
     it("faces its largest loop with auto direction", () => {
-      const path = annulusPath();
+      const path = annulusPath({ closed: true });
       const auto = geomExtrude(path, { direction: "auto" });
       assertArrayClose(assert, auto.positions, geomExtrude(path).positions);
 

@@ -10,6 +10,7 @@ import {
   crossPath,
   disc,
   mappings,
+  squarePath,
   star,
   starPath,
 } from "primitive-geometry";
@@ -34,7 +35,8 @@ const sampler = gpu.createSampler(ctx, {
   addressMode: "repeat",
 });
 
-// All face +Z. Paths (PolylineComplex) have no uvs and get triangulated caps.
+// All face +Z. Paths (PolylineComplex) have no uvs: closed ones get
+// triangulated caps, open ones only walls.
 const SHAPES = {
   star: () => star(),
   "star (hole)": () => star({ innerRadius: 0.1 }),
@@ -51,8 +53,19 @@ const SHAPES = {
     ]),
   ),
   starPath: () => starPath(),
+  "starPath (closed)": () => starPath({ closed: true }),
   annulusPath: () => annulusPath(),
+  "annulusPath (closed)": () => annulusPath({ closed: true }),
   crossPath: () => crossPath(),
+  "crossPath (closed)": () => crossPath({ closed: true }),
+  // Last vertex duplicates the first one's position, as in SVG paths
+  "squarePath (closed by position)": () => {
+    const { positions } = squarePath();
+    return {
+      positions: Float32Array.from([...positions, ...positions.subarray(0, 3)]),
+      cells: [[0, 1, 2, 3, 4]],
+    };
+  },
 };
 
 // Shape facing directions: each PlaneDirection, plus a diagonal one only
@@ -78,6 +91,8 @@ const CAP_MAPPINGS = {
 
 const DIRECTIONS = ["auto", "x", "-x", "y", "-y", "z", "-z"];
 
+const CLOSED = { auto: "auto", true: true, false: false };
+
 const VIEWS = { texture: 0, normals: 1, uvs: 2 };
 
 const toListOptions = (keys) =>
@@ -99,6 +114,7 @@ const options = {
   capEnd: true,
   creaseAngle: Math.PI / 6,
   ignoreSeams: true,
+  closed: "auto",
 };
 
 const createShape = () => {
@@ -247,6 +263,7 @@ extrudeFolder.addBinding(settings, "capMapping", {
 });
 extrudeFolder.addBinding(options, "creaseAngle", { min: 0, max: Math.PI });
 extrudeFolder.addBinding(options, "ignoreSeams");
+extrudeFolder.addBinding(options, "closed", { options: CLOSED });
 
 pane.addBinding(settings, "view", { options: VIEWS });
 
