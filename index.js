@@ -21,12 +21,28 @@ const isFlatArray = (attribute) =>
   (Array.isArray(attribute) || ArrayBuffer.isView(attribute)) &&
   !attribute[0]?.length;
 
-// Told apart by length only: a multiple of the vertex count
-const getVertexAttributes = (shape, vertexCount) =>
-  Object.entries(shape)
+/**
+ * Find the flat per-vertex attributes of a geometry, eg. `vertexColors`.
+ *
+ * Told apart by length only: any flat array whose length is a multiple of the
+ * vertex count.
+ *
+ * @param {object} geometry
+ * @param {number} vertexCount
+ * @param {Iterable<string>} [excluded=["positions", "normals", "uvs", "cells"]]
+ *   Attributes left out, eg. the ones a generator computes.
+ * @returns {import("./types.js").VertexAttribute[]}
+ */
+const getVertexAttributes = (
+  geometry,
+  vertexCount,
+  excluded = GENERATED_ATTRIBUTES,
+) => {
+  const excludedNames = new Set(excluded);
+  return Object.entries(geometry)
     .filter(
       ([name, source]) =>
-        !GENERATED_ATTRIBUTES.has(name) &&
+        !excludedNames.has(name) &&
         isFlatArray(source) &&
         source.length &&
         source.length % vertexCount === 0,
@@ -36,13 +52,26 @@ const getVertexAttributes = (shape, vertexCount) =>
       source,
       size: source.length / vertexCount,
     }));
+};
 
-// Shape vertex i, or shapeIndices[i], to vertex offset + i
-const copyAttributes = (geometry, attributes, offset, count, shapeIndices) => {
+/**
+ * Copy vertex attributes into a geometry: source vertex i, or
+ * `sourceIndices[i]`, to vertex `offset + i`.
+ *
+ * Target arrays must be allocated, eg. `new source.constructor(count * size)`.
+ *
+ * @param {object} geometry
+ * @param {import("./types.js").VertexAttribute[]} attributes
+ * @param {number} offset First target vertex.
+ * @param {number} count Number of vertices to copy.
+ * @param {ArrayLike<number>} [sourceIndices] Source vertex of each target
+ *   vertex.
+ */
+const copyAttributes = (geometry, attributes, offset, count, sourceIndices) => {
   for (const { name, source, size } of attributes) {
     const target = geometry[name];
     for (let i = 0; i < count; i++) {
-      const from = (shapeIndices ? shapeIndices[i] : i) * size;
+      const from = (sourceIndices ? sourceIndices[i] : i) * size;
       const to = (offset + i) * size;
       for (let k = 0; k < size; k++) target[to + k] = source[from + k];
     }
@@ -316,8 +345,26 @@ const computeProfile = (
     ? fromTriangles(positions, cells, direction, ignoreSeams)
     : fromPolylines(positions, cells, direction, closed);
 
-// Caps don't split vertices: angle based mappings (eg. polar) show a wrap seam
-const computeCapUvs = (positions, normal, perimeter, mapping) => {
+/**
+ * Compute cap uvs in the profile plane, scaled to its longest loop so they
+ * match walls wrapping u once around each loop.
+ *
+ * Caps don't split vertices: angle based mappings (eg. polar) show a wrap
+ * seam.
+ *
+ * @param {Float32Array} positions
+ * @param {import("./types.js").Profile} profile
+ * @param {import("./types.js").CapMappingFn} [mapping=mappings.circumferential]
+ * @returns {Float32Array}
+ */
+const computeCapUvs = (
+  positions,
+  { normal, loops },
+  mapping = mappings.circumferential,
+) => {
+  const perimeter = Math.max(
+    ...loops.map((loop) => computePerimeter(positions, loop)),
+  );
   const points = projectPositions(positions, normal);
   const count = points.length / 2;
   const min = [Infinity, Infinity];
@@ -628,11 +675,12 @@ const geomExtrude = (
 ) => {
   const { positions } = shape;
   const count = positions.length / 3;
-  const { normal, cells, loops } = computeProfile(shape, {
+  const profile = computeProfile(shape, {
     direction,
     ignoreSeams,
     closed,
   });
+  const { normal, cells, loops } = profile;
 
   const columns = computeColumns(positions, loops, normal, creaseAngle);
   const wallEdgeCount = columns.cells.length / 2;
@@ -669,13 +717,7 @@ const geomExtrude = (
   if (capCount) {
     const uvs =
       (!capMapping && shape.uvs) ||
-      computeCapUvs(
-        positions,
-        normal,
-        Math.max(...loops.map((loop) => computePerimeter(positions, loop))),
-        // Walls wrap u once around each loop: caps match that scale
-        capMapping || mappings.circumferential,
-      );
+      computeCapUvs(positions, profile, capMapping);
     const triangles = { positions, cells, attributes };
     const cap = { normal, displacement: start, side, flip };
     if (capStart) computeCap(geometry, triangles, uvs, cap, indices);
@@ -696,7 +738,15 @@ const geomExtrude = (
   return geometry;
 };
 
-export { computeBoundary, computeColumns, computeProfile, stitchRings };
+export {
+  computeBoundary,
+  computeCapUvs,
+  computeColumns,
+  computeProfile,
+  copyAttributes,
+  getVertexAttributes,
+  stitchRings,
+};
 
 export default geomExtrude;
 

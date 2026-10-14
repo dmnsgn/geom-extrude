@@ -18,8 +18,11 @@ import {
 
 import geomExtrude, {
   computeBoundary,
+  computeCapUvs,
   computeColumns,
   computeProfile,
+  copyAttributes,
+  getVertexAttributes,
   stitchRings,
 } from "../index.js";
 import { GLYPHS, glyph } from "../examples/glyph.js";
@@ -204,6 +207,75 @@ describe("stitchRings", () => {
     assert.equal(end, out.length);
     assert.deepEqual(Array.from(out.subarray(0, 10)), Array(10).fill(0));
     assert.ok(Math.min(...out.subarray(10)) >= 100);
+  });
+});
+
+describe("getVertexAttributes", () => {
+  const geometry = {
+    positions: new Float32Array(9),
+    uvs: new Float32Array(6),
+    vertexColors: new Float32Array(12),
+    ids: [0, 1, 2],
+    nested: [
+      [0, 0],
+      [1, 1],
+      [2, 2],
+    ],
+    offsets: [0, 0, 0, 1],
+    name: "abc",
+  };
+
+  it("finds flat per-vertex attributes with their size", () => {
+    const attributes = getVertexAttributes(geometry, 3);
+    assert.deepEqual(
+      attributes.map(({ name, size }) => [name, size]),
+      [
+        ["vertexColors", 4],
+        ["ids", 1],
+      ],
+    );
+  });
+
+  it("leaves out excluded attributes", () => {
+    const names = getVertexAttributes(geometry, 3, ["vertexColors"]).map(
+      ({ name }) => name,
+    );
+    assert.deepEqual(names, ["positions", "uvs", "ids"]);
+  });
+});
+
+describe("copyAttributes", () => {
+  const attributes = [{ name: "ids", source: [10, 11, 12], size: 1 }];
+
+  it("copies vertices in order at an offset", () => {
+    const geometry = { ids: new Uint16Array(5) };
+    copyAttributes(geometry, attributes, 2, 3);
+    assert.deepEqual(Array.from(geometry.ids), [0, 0, 10, 11, 12]);
+  });
+
+  it("copies source vertices by index", () => {
+    const geometry = { ids: new Uint16Array(4) };
+    copyAttributes(geometry, attributes, 0, 4, [2, 2, 0, 1]);
+    assert.deepEqual(Array.from(geometry.ids), [12, 12, 10, 11]);
+  });
+});
+
+describe("computeCapUvs", () => {
+  it("matches the extruded cap uvs", () => {
+    const shape = crossPath({ closed: true });
+    const uvs = computeCapUvs(shape.positions, computeProfile(shape));
+    const { uvs: extruded } = geomExtrude(shape);
+    assertArrayClose(assert, uvs, extruded.subarray(0, uvs.length));
+  });
+
+  it("supports primitive-geometry mappings", () => {
+    const shape = crossPath({ closed: true });
+    const profile = computeProfile(shape);
+    const uvs = computeCapUvs(shape.positions, profile, mappings.polar);
+    const { uvs: extruded } = geomExtrude(shape, {
+      capMapping: mappings.polar,
+    });
+    assertArrayClose(assert, uvs, extruded.subarray(0, uvs.length));
   });
 });
 

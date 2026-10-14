@@ -94,7 +94,7 @@ const DIRECTIONS = ["auto", "x", "-x", "y", "-y", "z", "-z"];
 
 const CLOSED = { auto: "auto", true: true, false: false };
 
-const VIEWS = { texture: 0, normals: 1, uvs: 2 };
+const VIEWS = { texture: 0, normals: 1, uvs: 2, "standard derivative": 3 };
 
 const toListOptions = (keys) =>
   Object.fromEntries(keys.map((key) => [key, key]));
@@ -160,6 +160,7 @@ struct VertexOut {
   @builtin(position) position: vec4f,
   @location(0) normal: vec3f,
   @location(1) uv: vec2f,
+  @location(2) worldPosition: vec3f,
 }
 
 @vertex
@@ -167,6 +168,7 @@ fn vertexMain(input: VertexIn) -> VertexOut {
   var output: VertexOut;
   output.normal = input.normal;
   output.uv = input.uv;
+  output.worldPosition = input.position;
   output.position = uniforms.projection * uniforms.view * vec4f(input.position, 1.0);
   return output;
 }
@@ -180,6 +182,9 @@ fn fragmentMain(input: VertexOut, @builtin(front_facing) frontFacing: bool) -> @
     color = normal * 0.5 + 0.5;
   } else if (uniforms.mode == 2.0) {
     color = vec3f(fract(input.uv), 0.0);
+  } else if (uniforms.mode == 3.0) {
+    let faceNormal = normalize(cross(dpdy(input.worldPosition), dpdx(input.worldPosition)));
+    color = faceNormal * 0.5 + 0.5;
   }
   // Back faces show through open caps and inside-out solids
   if (!frontFacing) {
@@ -226,8 +231,6 @@ const drawCmd = gpu.defineCommand({
     shader,
     depthWriteEnabled: true,
     cullMode: "none",
-    // Pushed back so the wireframe lines win the depth test: WebGPU only
-    // biases triangles
     depthBias: 1,
     depthBiasSlopeScale: 1,
   },

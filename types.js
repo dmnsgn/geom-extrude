@@ -23,6 +23,13 @@
  * @property {TypedArrayLike[]} cells
  */
 
+/**
+ * @typedef {object} VertexAttribute
+ * @property {string} name
+ * @property {ArrayLike<any>} source
+ * @property {number} size Components per vertex.
+ */
+
 /** @typedef {SimplicialComplex & VertexAttributes} SimplicialShape */
 
 /** @typedef {PolylineComplex & VertexAttributes} PolylineShape */
