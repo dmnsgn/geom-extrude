@@ -143,6 +143,15 @@ describe("computeProfile", () => {
     assert.deepEqual(closed.loops, [[0, 1, 2, 3, 0]]);
     assert.equal(closed.cells.length, 6);
   });
+
+  it("keeps forced closed segments open", () => {
+    const { cells, loops } = computeProfile(
+      { positions: [-1, 0, 0, 1, 0, 0], cells: [[0, 1]] },
+      { closed: true },
+    );
+    assert.deepEqual(loops, [[0, 1]]);
+    assert.equal(cells.length, 0);
+  });
 });
 
 describe("computeColumns", () => {

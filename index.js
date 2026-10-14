@@ -299,7 +299,10 @@ const fromPolylines = (positions, polylines, direction, closed) => {
         loop.length > 1 &&
         avec3.equals(positions, loop[0], positions, loop.at(-1));
       if (isClosing) loop.pop();
-      return { loop, isClosed: closed === true || isClosing };
+      return {
+        loop,
+        isClosed: (closed === true && loop.length > 2) || isClosing,
+      };
     })
     .filter(({ loop, isClosed }) => loop.length > (isClosed ? 2 : 1));
 
